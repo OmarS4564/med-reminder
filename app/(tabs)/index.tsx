@@ -1,108 +1,208 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet, Alert, Pressable } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native'
+import { useCallback, useMemo, useState } from 'react'
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { ThemedText } from '@/components/themed-text'
+import { ThemedView } from '@/components/themed-view'
 
-import {
-  ensureNotificationPermission,
-  scheduleTestNotification,
-} from '../../src/scheduling/notifications';
+import { DoseEvent } from '../../src/models/doseEvent'
+import { Medication } from '../../src/models/medication'
+import { generateTodayEvents } from '../../src/scheduling/generate'
+import { DB } from '../../src/storage/db'
 
-export default function HomeScreen() {
-  const onTestNotification = async () => {
+function iso(d: Date) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function addDays(yyyyMmDd: string, delta: number) {
+  const [y, m, d] = yyyyMmDd.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  dt.setDate(dt.getDate() + delta)
+  return iso(dt)
+}
+
+function hhmm(d: Date) {
+  const h = String(d.getHours()).padStart(2, '0')
+  const m = String(d.getMinutes()).padStart(2, '0')
+  return `${h}:${m}`
+}
+
+function toDisplayTime(hhmmStr: string) {
+  const [hRaw, mRaw] = hhmmStr.split(':')
+  const h = Number(hRaw)
+  const m = Number(mRaw)
+  const suffix = h >= 12 ? 'PM' : 'AM'
+  const hour12 = ((h + 11) % 12) + 1
+  return `${hour12}:${String(m).padStart(2, '0')} ${suffix}`
+}
+
+export default function TodayScreen() {
+  const [meds, setMeds] = useState<Medication[]>([])
+  const [events, setEvents] = useState<DoseEvent[]>([])
+  const today = iso(new Date())
+
+  const load = useCallback(async () => {
     try {
-      const ok = await ensureNotificationPermission();
-      if (!ok) {
-        Alert.alert(
-          'Notifications not enabled',
-          'Please allow notifications in iOS Settings to receive reminders.'
-        );
-        return;
-      }
+      const loadedMeds = await DB.getMeds()
+      const loadedEventsRaw = await DB.getEvents()
 
-      await scheduleTestNotification();
-      Alert.alert('Scheduled', 'A test notification will appear in about 5 seconds.');
-      return;
-    } catch (err) {
-      Alert.alert('Error', 'Failed to schedule notification. Check terminal logs.');
-      console.error(err);
+      const upgraded: DoseEvent[] = loadedEventsRaw.map((e: any) => {
+        if (e.localDate && e.localTime) return e as DoseEvent
+        const d = new Date(e.scheduledAt)
+        return { ...e, localDate: iso(d), localTime: hhmm(d) } as DoseEvent
+      })
+
+      const needUpgradeSave = loadedEventsRaw.some((e: any) => !(e.localDate && e.localTime))
+      if (needUpgradeSave) await DB.saveEvents(upgraded)
+
+      const medIds = new Set(loadedMeds.map(m => m.id))
+      const noOrphans = upgraded.filter(e => medIds.has(e.medicationId))
+
+      const byKey = new Map<string, DoseEvent>()
+      for (const e of noOrphans) {
+        const key = `${e.medicationId}|${e.localDate}|${e.localTime}`
+        const prev = byKey.get(key)
+        if (!prev) {
+          byKey.set(key, e)
+          continue
+        }
+        const prevScore = prev.actedAt ? 1 : 0
+        const nextScore = e.actedAt ? 1 : 0
+        if (nextScore > prevScore) byKey.set(key, e)
+      }
+      const deduped = Array.from(byKey.values())
+
+      const yesterday = addDays(today, -1)
+      const pruned = deduped.filter(e => e.localDate === today || e.localDate === yesterday)
+
+      const cleanedChanged = pruned.length !== upgraded.length
+      if (cleanedChanged) await DB.saveEvents(pruned)
+
+      const created = generateTodayEvents(loadedMeds, pruned)
+      const merged = [...pruned, ...created]
+      if (created.length > 0) await DB.saveEvents(merged)
+
+      setMeds(loadedMeds)
+      setEvents(merged)
+    } catch (e) {
+      console.error(e)
+      Alert.alert('Error', 'Failed to load local data.')
     }
-  };
+  }, [today])
+
+  useFocusEffect(
+    useCallback(() => {
+      load()
+    }, [load])
+  )
+
+  const medById = useMemo(() => {
+    const m = new Map<string, Medication>()
+    for (const med of meds) m.set(med.id, med)
+    return m
+  }, [meds])
+
+  const todaysEvents = useMemo(() => {
+    return events
+      .filter(e => e.localDate === today)
+      .sort((a, b) => a.localTime.localeCompare(b.localTime))
+  }, [events, today])
+
+  const lowStockMeds = useMemo(() => {
+    return meds
+      .filter(m => m.active)
+      .filter(m => Number.isFinite(m.pillsRemaining) && Number.isFinite(m.refillThreshold))
+      .filter(m => m.pillsRemaining <= m.refillThreshold)
+      .sort((a, b) => a.pillsRemaining - b.pillsRemaining)
+  }, [meds])
+
+  const setEventStatus = async (id: string, status: 'TAKEN' | 'SKIPPED') => {
+    const current = events.find(e => e.id === id)
+    if (!current || current.status !== 'PENDING') return
+
+    const now = new Date().toISOString()
+    const nextEvents = events.map(e => (e.id === id ? { ...e, status, actedAt: now } : e))
+    setEvents(nextEvents)
+    await DB.saveEvents(nextEvents)
+
+    if (status === 'TAKEN') {
+      const ev = nextEvents.find(e => e.id === id)
+      if (!ev) return
+      const nextMeds = meds.map(m => {
+        if (m.id !== ev.medicationId) return m
+        const next = Math.max(0, m.pillsRemaining - m.pillsPerDose)
+        return { ...m, pillsRemaining: next, updatedAt: Date.now() }
+      })
+      setMeds(nextMeds)
+      await DB.saveMeds(nextMeds)
+    }
+  }
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }
-    >
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
+    <ScrollView contentContainerStyle={styles.container}>
+      <ThemedView style={styles.header}>
+        <ThemedText type="title">Today</ThemedText>
       </ThemedView>
 
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
+      {lowStockMeds.length > 0 && (
+        <ThemedView style={styles.banner}>
+          <ThemedText type="defaultSemiBold">Refill needed</ThemedText>
+          <ThemedText style={{ marginTop: 4 }}>
+            {lowStockMeds
+              .slice(0, 3)
+              .map(m => `${m.name}: ${m.pillsRemaining} left`)
+              .join(' • ')}
+            {lowStockMeds.length > 3 ? ` • +${lowStockMeds.length - 3} more` : ''}
+          </ThemedText>
+        </ThemedView>
+      )}
 
-      <ThemedView style={styles.stepContainer}>
-        <Pressable onPress={onTestNotification}>
-          <ThemedText type="subtitle">Step 2: Test Notifications (tap)</ThemedText>
-        </Pressable>
+      {todaysEvents.length === 0 ? (
+        <ThemedText>No doses scheduled for today.</ThemedText>
+      ) : (
+        <View style={{ gap: 10 }}>
+          {todaysEvents.map(e => {
+            const med = medById.get(e.medicationId)
+            if (!med) return null
 
-        <ThemedText>
-          Tap the title above to request permission (first time) and schedule a test reminder 5
-          seconds later.
-        </ThemedText>
-      </ThemedView>
+            return (
+              <ThemedView key={e.id} style={styles.card}>
+                <ThemedText type="defaultSemiBold">
+                  {toDisplayTime(e.localTime)} — {`${med.name} (${med.dosageText})`}
+                </ThemedText>
 
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
-  );
+                <ThemedText>
+                  Status: {e.status} • Pills left: {med.pillsRemaining}
+                  {med.pillsRemaining <= med.refillThreshold ? ' • Refill soon' : ''}
+                </ThemedText>
+
+                {e.status === 'PENDING' && (
+                  <View style={styles.row}>
+                    <Pressable onPress={() => setEventStatus(e.id, 'TAKEN')} style={styles.btn}>
+                      <ThemedText type="defaultSemiBold">Taken</ThemedText>
+                    </Pressable>
+                    <Pressable onPress={() => setEventStatus(e.id, 'SKIPPED')} style={styles.btn}>
+                      <ThemedText type="defaultSemiBold">Skip</ThemedText>
+                    </Pressable>
+                  </View>
+                )}
+              </ThemedView>
+            )
+          })}
+        </View>
+      )}
+    </ScrollView>
+  )
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-});
+  container: { padding: 16, gap: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  banner: { padding: 12, borderRadius: 12, gap: 2, borderWidth: 1, borderColor: '#b55' },
+  card: { padding: 12, borderRadius: 12, gap: 6 },
+  row: { flexDirection: 'row', gap: 10, marginTop: 8 },
+  btn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: '#999' },
+})
