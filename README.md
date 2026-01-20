@@ -1,50 +1,17 @@
-# Welcome to your Expo app 👋
+# Med Reminder
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Med Reminder is a simple, privacy-first iOS/Android app that helps people take their medication on time and avoid running out.
 
-## Get started
+The app is designed around two main screens:
 
-1. Install dependencies
+- Today — shows all scheduled doses for the current day in chronological order. You can mark doses as *Taken* or *Skipped*. If any medication is running low, a refill banner appears at the top.
+- Medications — where you add, disable, or delete medications. For each medication you specify:
+  - name and dose
+  - one or more daily times
+  - pills remaining
+  - pills per dose
+  - a refill threshold
 
-   ```bash
-   npm install
-   ```
+All data is stored locally on your device. The app schedules daily local notifications for each medication time and automatically updates them when you add, remove, or disable a medication.
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+---
