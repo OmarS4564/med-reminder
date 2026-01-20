@@ -143,17 +143,13 @@ export default function TodayScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <ThemedView style={styles.header}>
-        <ThemedText type="title">Today</ThemedText>
-      </ThemedView>
-
       {lowStockMeds.length > 0 && (
         <ThemedView style={styles.banner}>
           <ThemedText type="defaultSemiBold">Refill needed</ThemedText>
           <ThemedText style={{ marginTop: 4 }}>
             {lowStockMeds
               .slice(0, 3)
-              .map(m => `${m.name}: ${m.pillsRemaining} left`)
+              .map(m => `${m.name}: ${m.pillsRemaining} pills left`)
               .join(' • ')}
             {lowStockMeds.length > 3 ? ` • +${lowStockMeds.length - 3} more` : ''}
           </ThemedText>
@@ -161,7 +157,7 @@ export default function TodayScreen() {
       )}
 
       {todaysEvents.length === 0 ? (
-        <ThemedText>No doses scheduled for today.</ThemedText>
+        <ThemedText style={styles.noDoses}>No doses scheduled for today.</ThemedText>
       ) : (
         <View style={{ gap: 10 }}>
           {todaysEvents.map(e => {
@@ -199,10 +195,10 @@ export default function TodayScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, gap: 12 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  banner: { padding: 12, borderRadius: 12, gap: 2, borderWidth: 1, borderColor: '#b55' },
-  card: { padding: 12, borderRadius: 12, gap: 6 },
-  row: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  btn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: '#999' },
+  container: { padding: 16, gap: 16 },
+  banner: { padding: 12, borderRadius: 12, gap: 4, borderWidth: 1, borderColor: '#888888' },
+  card: { padding: 16, borderRadius: 12, gap: 8, borderWidth: 1, borderColor: '#cccccc', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 2 },
+  row: { flexDirection: 'row', gap: 12, marginTop: 12 },
+  btn: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8, borderWidth: 1, borderColor: '#999999' },
+  noDoses: { textAlign: 'center', marginTop: 40, fontSize: 16, color: '#666666' },
 })

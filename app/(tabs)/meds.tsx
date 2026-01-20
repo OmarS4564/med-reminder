@@ -202,10 +202,6 @@ export default function MedicationsScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-      <View style={styles.header}>
-        <ThemedText type="title">Medications</ThemedText>
-      </View>
-
       <ThemedView style={styles.card}>
         <ThemedText type="defaultSemiBold">Add medication</ThemedText>
 
@@ -344,10 +340,9 @@ export default function MedicationsScreen() {
 
 const styles = StyleSheet.create({
   page: { padding: 16, gap: 12 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
 
-  card: { padding: 12, borderRadius: 12, gap: 10 },
+  card: { padding: 12, borderRadius: 12, gap: 10, borderWidth: 1, borderColor: '#cccccc', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 2 },
   row: { flexDirection: 'row', gap: 10, alignItems: 'center' },
 
   input: { borderWidth: 1, borderColor: '#999', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, color: '#fff' },
