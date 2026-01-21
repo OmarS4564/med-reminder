@@ -7,7 +7,6 @@ const ANDROID_CHANNEL_ID = 'dose-reminders'
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
     shouldShowBanner: true,
