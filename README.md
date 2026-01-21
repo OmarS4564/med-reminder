@@ -1,6 +1,6 @@
-# Med Reminder
+# MedSync
 
-Med Reminder is a simple, privacy-first iOS/Android app that helps people take their medication on time and avoid running out.
+MedSync is a simple, privacy-first iOS/Android app that helps people take their medication on time and avoid running out.
 
 The app is designed around two main screens:
 
